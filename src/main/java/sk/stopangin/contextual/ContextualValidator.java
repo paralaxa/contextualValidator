@@ -4,6 +4,9 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import javax.validation.ConstraintValidator;
 import javax.validation.ConstraintValidatorContext;
@@ -17,6 +20,8 @@ public class ContextualValidator implements
 
   private final ExpressionParser expressionParser = new SpelExpressionParser();
   private Expression expression;
+  private final Map<Field, Expression> fieldExpressionMap = new ConcurrentHashMap<>();
+  private boolean initialized;
 
   @Override
   public void initialize(ValidateWhen contextualValidation) {
@@ -25,30 +30,61 @@ public class ContextualValidator implements
 
   @Override
   public boolean isValid(Model model, ConstraintValidatorContext constraintValidatorContext) {
-    Field[] declaredFields = model.getClass().getDeclaredFields();
-
+    AtomicBoolean isValid = new AtomicBoolean(true);
     if (expression.getValue(model, Boolean.class)) {
-      for (Field declaredField : declaredFields) {
-        List<Annotation> conditionalAnnotation = getConditionalAnnotation(declaredField);
-        if (conditionalAnnotation != null) {
-          for (Annotation annotation : conditionalAnnotation) {
-            String value = getValueSafe(annotation);
-            String data = getDataSafe(annotation);
-            String expressionStr = value.replaceAll("<#FIELDNAME#>", declaredField.getName());
-            expressionStr = expressionStr.replaceAll("<#DATA#>", data);
-            Expression expression = expressionParser.parseExpression(expressionStr);
-            Boolean value1 = expression.getValue(model, Boolean.class);
-            System.out.printf("Validation result of '%s' is : %b%n", declaredField.getName(),
-                value1);
+      if (initialized) {
+        fieldExpressionMap.forEach((field, expression) -> {
+          if (!expression.getValue(model, Boolean.class)) {
+            buildValidationContext(constraintValidatorContext, field);
+            isValid.set(false);
           }
+        });
+      } else {
+        initalizeAndValidate(model, constraintValidatorContext, isValid);
+        initialized = true;
+      }
+    }
+    return isValid.get();
+  }
+
+  private void initalizeAndValidate(Model model,
+      ConstraintValidatorContext constraintValidatorContext,
+      AtomicBoolean isValid) {
+    Field[] declaredFields = model.getClass().getDeclaredFields();
+    for (Field declaredField : declaredFields) {
+      List<Annotation> conditionalAnnotation = getConditionalAnnotation(declaredField);
+      if (conditionalAnnotation != null) {
+        for (Annotation annotation : conditionalAnnotation) {
+          String value = getValueSafe(annotation);
+          String data = getDataSafe(annotation);
+          String expressionStr = value.replaceAll("<#FIELDNAME#>", declaredField.getName());
+          expressionStr = expressionStr.replaceAll("<#DATA#>", data);
+          Expression expression = expressionParser.parseExpression(expressionStr);
+          fieldExpressionMap.put(declaredField, expression);
+          if (!expression.getValue(model, Boolean.class)) {
+            buildValidationContext(constraintValidatorContext, declaredField);
+            isValid.set(false);
+          }
+
         }
       }
     }
-    return true;
+  }
+
+  private void buildValidationContext(ConstraintValidatorContext constraintValidatorContext,
+      Field field) {
+    constraintValidatorContext
+        .buildConstraintViolationWithTemplate("Value is not valid")
+        .addPropertyNode(field.getName())
+        .addConstraintViolation();
   }
 
   private String getValueSafe(Annotation annotation) {
-    return extractAnnotationValueSafe(annotation, "value");
+    try {
+      return (String) annotation.annotationType().getDeclaredField("value").get(annotation);
+    } catch (Exception e) {
+      return "";
+    }
   }
 
   private String getDataSafe(Annotation annotation) {
@@ -58,14 +94,6 @@ public class ContextualValidator implements
       return "";
     }
 
-  }
-
-  private String extractAnnotationValueSafe(Annotation annotation, String fieldName) {
-    try {
-      return (String) annotation.annotationType().getDeclaredField(fieldName).get(annotation);
-    } catch (Exception e) {
-      return "";
-    }
   }
 
   private List<Annotation> getConditionalAnnotation(Field field) {
@@ -79,15 +107,8 @@ public class ContextualValidator implements
         .collect(Collectors.toList());
   }
 
-  private static class AnnotationDefinitionHolder {
+  private record AnnotationDefinitionHolder(Annotation annotation,
+                                            Annotation[] annotationTypeAnnotation) {
 
-    public AnnotationDefinitionHolder(Annotation annotation,
-        Annotation[] annotationTypeAnnotation) {
-      this.annotation = annotation;
-      this.annotationTypeAnnotation = annotationTypeAnnotation;
-    }
-
-    private Annotation annotation;
-    private Annotation[] annotationTypeAnnotation;
   }
 }

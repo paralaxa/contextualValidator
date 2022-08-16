@@ -2,6 +2,8 @@ package sk.stopangin.contextual;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import javax.validation.ConstraintViolation;
 import javax.validation.Validation;
 import javax.validation.Validator;
 import lombok.Data;
@@ -14,7 +16,8 @@ public class Test {
     t.setValue("g");
     t.setWeather("shiny");
     t.setShouldValidate(true);
-    v.validate(t);
+    Set<ConstraintViolation<Model>> validate = v.validate(t);
+    System.out.println(validate);
   }
 
   @ValidateWhen(condition = "weather =='shiny'")
