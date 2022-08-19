@@ -13,29 +13,32 @@ import javax.validation.ConstraintValidatorContext;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import sk.stopangin.contextual.Test.Model;
 
 public class ContextualValidator implements
-    ConstraintValidator<ValidateWhen, Test.Model> {
+    ConstraintValidator<ValidateConditionaly, Object> {
 
   private final ExpressionParser expressionParser = new SpelExpressionParser();
   private Expression expression;
-  private final Map<Field, Expression> fieldExpressionMap = new ConcurrentHashMap<>();
+  private final Map<Field, ValidationDataHolder> conditionAndExpressionHolderMap = new ConcurrentHashMap<>();
   private boolean initialized;
 
   @Override
-  public void initialize(ValidateWhen contextualValidation) {
+  public void initialize(ValidateConditionaly contextualValidation) {
     expression = expressionParser.parseExpression(contextualValidation.condition());
   }
 
   @Override
-  public boolean isValid(Model model, ConstraintValidatorContext constraintValidatorContext) {
+  public boolean isValid(Object model, ConstraintValidatorContext constraintValidatorContext) {
     AtomicBoolean isValid = new AtomicBoolean(true);
     if (expression.getValue(model, Boolean.class)) {
       if (initialized) {
-        fieldExpressionMap.forEach((field, expression) -> {
-          if (!expression.getValue(model, Boolean.class)) {
-            buildValidationContext(constraintValidatorContext, field);
+        conditionAndExpressionHolderMap.forEach((field, conditionAndExpressionHolder) -> {
+          Expression condition = conditionAndExpressionHolder.condition();
+          Expression expression = conditionAndExpressionHolder.expression();
+          String message = conditionAndExpressionHolder.message();
+          if (condition.getValue(model, Boolean.class) &&
+              !expression.getValue(model, Boolean.class)) {
+            buildValidationContext(constraintValidatorContext, field, message);
             isValid.set(false);
           }
         });
@@ -47,7 +50,7 @@ public class ContextualValidator implements
     return isValid.get();
   }
 
-  private void initalizeAndValidate(Model model,
+  private void initalizeAndValidate(Object model,
       ConstraintValidatorContext constraintValidatorContext,
       AtomicBoolean isValid) {
     Field[] declaredFields = model.getClass().getDeclaredFields();
@@ -57,24 +60,39 @@ public class ContextualValidator implements
         for (Annotation annotation : conditionalAnnotation) {
           String value = getValueSafe(annotation);
           String data = getDataSafe(annotation);
+          String message = getValidationMessage(annotation);
           String expressionStr = value.replaceAll("<#FIELDNAME#>", declaredField.getName());
           expressionStr = expressionStr.replaceAll("<#DATA#>", data);
+          message = message
+              .replaceAll("<#FIELDNAME#>", declaredField.getName())
+              .replaceAll("<#DATA#>", data);
           Expression expression = expressionParser.parseExpression(expressionStr);
-          fieldExpressionMap.put(declaredField, expression);
-          if (!expression.getValue(model, Boolean.class)) {
-            buildValidationContext(constraintValidatorContext, declaredField);
+          Expression condition = getCondition(declaredField);
+          conditionAndExpressionHolderMap.put(declaredField,
+              new ValidationDataHolder(expression, condition, message));
+          if (condition.getValue(model, Boolean.class) &&
+              !expression.getValue(model, Boolean.class)) {
+            buildValidationContext(constraintValidatorContext, declaredField, message);
             isValid.set(false);
           }
-
         }
       }
     }
   }
 
+  private Expression getCondition(Field field) {
+    Condition conditionDefinition = field.getAnnotation(Condition.class);
+    if (conditionDefinition != null) {
+      return expressionParser.parseExpression(conditionDefinition.value());
+    }
+    return expressionParser.parseExpression("true");
+  }
+
   private void buildValidationContext(ConstraintValidatorContext constraintValidatorContext,
-      Field field) {
+      Field field, String validationMessage) {
+    constraintValidatorContext.disableDefaultConstraintViolation();
     constraintValidatorContext
-        .buildConstraintViolationWithTemplate("Value is not valid")
+        .buildConstraintViolationWithTemplate(validationMessage)
         .addPropertyNode(field.getName())
         .addConstraintViolation();
   }
@@ -107,8 +125,17 @@ public class ContextualValidator implements
         .collect(Collectors.toList());
   }
 
+  private String getValidationMessage(Annotation annotation) {
+    return annotation.annotationType()
+        .getDeclaredAnnotation(ConditionalValidation.class).message();
+  }
+
   private record AnnotationDefinitionHolder(Annotation annotation,
                                             Annotation[] annotationTypeAnnotation) {
+
+  }
+
+  private record ValidationDataHolder(Expression condition, Expression expression, String message) {
 
   }
 }

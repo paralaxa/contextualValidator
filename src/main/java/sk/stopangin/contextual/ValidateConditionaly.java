@@ -10,9 +10,9 @@ import javax.validation.Payload;
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Constraint(validatedBy = {ContextualValidator.class})
-public @interface ValidateWhen {
+public @interface ValidateConditionaly {
 
-  String condition();
+  String condition() default "true";
 
   String message() default "";
 

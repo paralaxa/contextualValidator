@@ -7,9 +7,8 @@ import java.lang.annotation.Target;
 
 @Target({ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
-@ConditionalValidation
+@ConditionalValidation(message = "<#FIELDNAME#> cannot be empty")
 public @interface ConditionalNonEmpty {
 
   String value = "<#FIELDNAME#>!=null && <#FIELDNAME#>!=''";
-
 }

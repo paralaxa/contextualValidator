@@ -7,10 +7,10 @@ import java.lang.annotation.Target;
 
 @Target({ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
-@ConditionalValidation(message = "<#FIELDNAME#>'s size has to be gte <#DATA#>")
-public @interface ConditionalSize {
+@ConditionalValidation(message = "<#FIELDNAME#>'s value has to be: '<#DATA#>'")
+public @interface ConditionalValue {
 
-  String value = "<#FIELDNAME#>!=null && <#FIELDNAME#>.size()>= <#DATA#>";
+  String value = "('<#DATA#>').equals(<#FIELDNAME#>)";
 
   String data();
 }
