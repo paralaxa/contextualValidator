@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.validation.ConstraintValidator;
@@ -21,28 +22,32 @@ public class KafkaPropertiesValidator2 implements
 
   private final Map<FlowDescription, ObjectAndFieldName> flowDescriptionConsumerMap = new ConcurrentHashMap<>();
   private final Map<FlowDescription, ObjectAndFieldName> flowDescriptionProducerMap = new ConcurrentHashMap<>();
+  private boolean initialized;
 
   @Override
   public boolean isValid(CmpKafkaProperties cmpKafkaProperties,
       ConstraintValidatorContext constraintValidatorContext) {
-
-    initialize(cmpKafkaProperties);
-
+    if (!initialized) {
+      initialize(cmpKafkaProperties);
+    }
     FlowQueues confluent = cmpKafkaProperties.getFlow().getConfluent();
 
-    boolean isConsumerValid = isValid(confluent::getConsumer, constraintValidatorContext);
-    boolean isProducerValid = isValid(confluent::getProducer, constraintValidatorContext);
+    boolean isConsumerValid = isValid(confluent::getConsumer, flowDescriptionConsumerMap::get,
+        constraintValidatorContext);
+    boolean isProducerValid = isValid(confluent::getProducer, flowDescriptionProducerMap::get,
+        constraintValidatorContext);
 
     return isConsumerValid && isProducerValid;
   }
 
 
   private boolean isValid(Supplier<List<FlowDescription>> descriptionsSupplier,
+      Function<FlowDescription, ObjectAndFieldName> objectAndFieldNameProvider,
       ConstraintValidatorContext constraintValidatorContext) {
     AtomicBoolean isValid = new AtomicBoolean(true);
 
     descriptionsSupplier.get().forEach(flowDescription -> {
-      ObjectAndFieldName objectAndFieldName = flowDescriptionConsumerMap.get(flowDescription);
+      ObjectAndFieldName objectAndFieldName = objectAndFieldNameProvider.apply(flowDescription);
       boolean objectValid = isObjectValid(constraintValidatorContext, flowDescription,
           objectAndFieldName);
       if (!objectValid) {
@@ -101,10 +106,6 @@ public class KafkaPropertiesValidator2 implements
     return Arrays.stream(object.getClass().getDeclaredFields())
         .filter(field -> field.getDeclaredAnnotation(NotEmpty.class) != null)
         .collect(Collectors.toList());
-  }
-
-  private boolean isEmpty(String value) {
-    return value == null || value.isEmpty();
   }
 
   private void initialize(CmpKafkaProperties cmpKafkaProperties) {
