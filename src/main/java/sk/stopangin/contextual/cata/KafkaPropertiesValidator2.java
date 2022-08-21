@@ -17,6 +17,10 @@ import org.hibernate.validator.constraints.NotEmpty;
 import sk.stopangin.contextual.cata.CmpKafkaProperties.Flow.FlowQueues;
 import sk.stopangin.contextual.cata.Kafka07FlowConfigurationDefinition.FlowDescription;
 
+/**
+ * Will provide simple validation for {@link CmpKafkaProperties}
+ *
+ */
 public class KafkaPropertiesValidator2 implements
     ConstraintValidator<KafkaPropertiesValidation, CmpKafkaProperties> {
 
