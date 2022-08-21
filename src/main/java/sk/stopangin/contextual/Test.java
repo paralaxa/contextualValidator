@@ -21,7 +21,16 @@ public class Test {
       System.out.println(
           modelConstraintViolation.getPropertyPath() + " " + modelConstraintViolation.getMessage());
     });
-
+    Model t3 = new Model();
+    t3.setWeather("shiny");
+    t3.setShouldValidate(true);
+    t3.setGajaka("dasdasad");
+    Test2 t4 = new Test2();
+    t3.setTest2(t4);
+    v.validate(t3).forEach(modelConstraintViolation -> {
+      System.out.println("t3 " +
+          modelConstraintViolation.getPropertyPath() + " " + modelConstraintViolation.getMessage());
+    });
   }
 
   @ValidateConditionaly(condition = "weather =='shiny'")
@@ -35,7 +44,7 @@ public class Test {
     private boolean shouldValidate;
     @ConditionalValue(data = "xxx")
     private String gajaka;
-    @Condition("gajaka.equals('yyy')")
+    @Condition("gajaka.equals('aaa')")
     @Valid
     private Test2 test2;
   }

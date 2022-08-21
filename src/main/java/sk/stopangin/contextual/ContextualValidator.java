@@ -69,7 +69,7 @@ public class ContextualValidator implements
           Expression expression = expressionParser.parseExpression(expressionStr);
           Expression condition = getCondition(declaredField);
           conditionAndExpressionHolderMap.put(declaredField,
-              new ValidationDataHolder(expression, condition, message));
+              new ValidationDataHolder(condition, expression, message));
           if (condition.getValue(model, Boolean.class) &&
               !expression.getValue(model, Boolean.class)) {
             buildValidationContext(constraintValidatorContext, declaredField, message);
